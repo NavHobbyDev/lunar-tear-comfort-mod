@@ -79,6 +79,9 @@ The base code is derived from:
 
 Upstream code remains the work of its original authors. This repository does not claim to re-license their work beyond the terms of the original MIT license.
 
+Documentation and some code changes were written with AI assistance;  
+the maintainer reviewed and verified the final result.
+
 If you are an upstream author and want a different credit line, license note, or removal, open an issue or contact the maintainer.
 
 ---
