@@ -1,0 +1,20 @@
+FROM alpine:latest AS builder
+
+WORKDIR /usr/local/src
+COPY . .
+
+RUN apk add --no-cache go
+
+RUN go build -o auth-server ./cmd/auth-server
+
+FROM alpine:latest
+
+WORKDIR /opt/auth-server
+
+RUN chown 1000:1000 /opt/auth-server
+
+USER 1000
+
+COPY --from=builder /usr/local/src/auth-server .
+
+ENTRYPOINT ["./auth-server"]
