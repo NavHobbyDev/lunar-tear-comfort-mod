@@ -1,3 +1,5 @@
+Read the [Mod Documentation](README_COMFORT_MOD.md)
+
 # Lunar Tear
 
 Private server research project for a certain discontinued mobile game.
