@@ -1,0 +1,91 @@
+package masterdata
+
+import (
+	"log"
+	"sort"
+
+	"lunar-tear/server/internal/utils"
+)
+
+type loginBonusStampKey struct {
+	LoginBonusId    int32
+	LowerPageNumber int32
+	StampNumber     int32
+}
+
+type LoginBonusReward struct {
+	PossessionType int32
+	PossessionId   int32
+	Count          int32
+}
+
+type LoginBonusCatalog struct {
+	stamps     map[loginBonusStampKey]LoginBonusReward
+	bonusPages map[int32][]int32
+	totalPages map[int32]int32
+}
+
+func (c *LoginBonusCatalog) LookupStampReward(loginBonusId, pageNumber, stampNumber int32) (LoginBonusReward, bool) {
+	pages := c.bonusPages[loginBonusId]
+	lower := int32(-1)
+	for _, p := range pages {
+		if p <= pageNumber {
+			lower = p
+		} else {
+			break
+		}
+	}
+	if lower < 0 {
+		return LoginBonusReward{}, false
+	}
+	entry, ok := c.stamps[loginBonusStampKey{loginBonusId, lower, stampNumber}]
+	return entry, ok
+}
+
+func (c *LoginBonusCatalog) TotalPageCount(loginBonusId int32) int32 {
+	return c.totalPages[loginBonusId]
+}
+
+func LoadLoginBonusCatalog() *LoginBonusCatalog {
+	stamps, err := utils.ReadTable[EntityMLoginBonusStamp]("m_login_bonus_stamp")
+	if err != nil {
+		log.Fatalf("load login bonus stamp table: %v", err)
+	}
+
+	bonuses, err := utils.ReadTable[EntityMLoginBonus]("m_login_bonus")
+	if err != nil {
+		log.Fatalf("load login bonus table: %v", err)
+	}
+
+	cat := &LoginBonusCatalog{
+		stamps:     make(map[loginBonusStampKey]LoginBonusReward, len(stamps)),
+		bonusPages: make(map[int32][]int32),
+		totalPages: make(map[int32]int32, len(bonuses)),
+	}
+
+	for _, b := range bonuses {
+		cat.totalPages[b.LoginBonusId] = b.TotalPageCount
+	}
+
+	seenPages := make(map[loginBonusStampKey]struct{})
+	for _, s := range stamps {
+		cat.stamps[loginBonusStampKey{s.LoginBonusId, s.LowerPageNumber, s.StampNumber}] = LoginBonusReward{
+			PossessionType: s.RewardPossessionType,
+			PossessionId:   s.RewardPossessionId,
+			Count:          s.RewardCount,
+		}
+		dedup := loginBonusStampKey{LoginBonusId: s.LoginBonusId, LowerPageNumber: s.LowerPageNumber}
+		if _, exists := seenPages[dedup]; !exists {
+			seenPages[dedup] = struct{}{}
+			cat.bonusPages[s.LoginBonusId] = append(cat.bonusPages[s.LoginBonusId], s.LowerPageNumber)
+		}
+	}
+
+	for id := range cat.bonusPages {
+		sort.Slice(cat.bonusPages[id], func(i, j int) bool {
+			return cat.bonusPages[id][i] < cat.bonusPages[id][j]
+		})
+	}
+
+	return cat
+}

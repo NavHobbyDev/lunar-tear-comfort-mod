@@ -1,0 +1,225 @@
+package masterdata
+
+import (
+	"log"
+	"sort"
+
+	"lunar-tear/server/internal/utils"
+)
+
+type LabyrinthChapter struct {
+	EventQuestChapterId int32
+	LatestSeasonNumber  int32
+	StageOrders         []int32
+}
+
+type LabyrinthStageTier struct {
+	QuestMissionClearCount int32
+	Rewards                []RewardItem
+}
+
+type LabyrinthSeasonMilestone struct {
+	HeadQuestId    int32
+	HeadStageOrder int32
+	Rewards        []RewardItem
+}
+
+type labyrinthStageKey struct {
+	ChapterId  int32
+	StageOrder int32
+}
+
+type LabyrinthCatalog struct {
+	ChaptersByOrder           []LabyrinthChapter
+	ClearRewardsByStage       map[labyrinthStageKey][]RewardItem
+	AccumTiersByStage         map[labyrinthStageKey][]LabyrinthStageTier
+	SeasonMilestonesByChapter map[int32][]LabyrinthSeasonMilestone
+}
+
+func (c *LabyrinthCatalog) StageClearReward(chapterId, stageOrder int32) []RewardItem {
+	return c.ClearRewardsByStage[labyrinthStageKey{chapterId, stageOrder}]
+}
+
+func (c *LabyrinthCatalog) CollectAccumulationRewards(chapterId, stageOrder, oldCount, targetCount int32) ([]RewardItem, int32) {
+	var items []RewardItem
+	highest := int32(0)
+	for _, t := range c.AccumTiersByStage[labyrinthStageKey{chapterId, stageOrder}] {
+		if t.QuestMissionClearCount > oldCount && t.QuestMissionClearCount <= targetCount {
+			items = append(items, t.Rewards...)
+			if t.QuestMissionClearCount > highest {
+				highest = t.QuestMissionClearCount
+			}
+		}
+	}
+	return items, highest
+}
+
+func (c *LabyrinthCatalog) SeasonMilestones(chapterId int32) []LabyrinthSeasonMilestone {
+	return c.SeasonMilestonesByChapter[chapterId]
+}
+
+func LoadLabyrinthCatalog() *LabyrinthCatalog {
+	seasonRows, err := utils.ReadTable[EntityMEventQuestLabyrinthSeason]("m_event_quest_labyrinth_season")
+	if err != nil {
+		log.Printf("[labyrinth] m_event_quest_labyrinth_season unavailable, labyrinth disabled: %v", err)
+		return &LabyrinthCatalog{}
+	}
+	stageRows, err := utils.ReadTable[EntityMEventQuestLabyrinthStage]("m_event_quest_labyrinth_stage")
+	if err != nil {
+		log.Printf("[labyrinth] m_event_quest_labyrinth_stage unavailable, labyrinth disabled: %v", err)
+		return &LabyrinthCatalog{}
+	}
+
+	// chapterId -> highest SeasonNumber
+	latestSeason := make(map[int32]int32)
+	for _, r := range seasonRows {
+		if r.SeasonNumber > latestSeason[r.EventQuestChapterId] {
+			latestSeason[r.EventQuestChapterId] = r.SeasonNumber
+		}
+	}
+	// chapterId -> stage orders
+	stagesByChapter := make(map[int32][]int32)
+	for _, r := range stageRows {
+		stagesByChapter[r.EventQuestChapterId] = append(stagesByChapter[r.EventQuestChapterId], r.StageOrder)
+	}
+
+	chapters := make([]LabyrinthChapter, 0, len(latestSeason))
+	for chapterId, season := range latestSeason {
+		stages := stagesByChapter[chapterId]
+		sort.Slice(stages, func(i, j int) bool { return stages[i] < stages[j] })
+		chapters = append(chapters, LabyrinthChapter{
+			EventQuestChapterId: chapterId,
+			LatestSeasonNumber:  season,
+			StageOrders:         stages,
+		})
+	}
+	sort.Slice(chapters, func(i, j int) bool {
+		return chapters[i].EventQuestChapterId < chapters[j].EventQuestChapterId
+	})
+
+	clearRewards, accumTiers, seasonMilestones := loadLabyrinthRewards(seasonRows, stageRows)
+
+	log.Printf("labyrinth catalog loaded: %d chapters, %d stages with clear rewards, %d with accumulation rewards, %d chapters with season rewards",
+		len(chapters), len(clearRewards), len(accumTiers), len(seasonMilestones))
+	return &LabyrinthCatalog{
+		ChaptersByOrder:           chapters,
+		ClearRewardsByStage:       clearRewards,
+		AccumTiersByStage:         accumTiers,
+		SeasonMilestonesByChapter: seasonMilestones,
+	}
+}
+
+func loadLabyrinthRewards(seasonRows []EntityMEventQuestLabyrinthSeason, stageRows []EntityMEventQuestLabyrinthStage) (
+	clearRewards map[labyrinthStageKey][]RewardItem,
+	accumTiers map[labyrinthStageKey][]LabyrinthStageTier,
+	seasonMilestones map[int32][]LabyrinthSeasonMilestone,
+) {
+	rewardGroupRows, err := utils.ReadTable[EntityMEventQuestLabyrinthRewardGroup]("m_event_quest_labyrinth_reward_group")
+	if err != nil {
+		log.Printf("[labyrinth] m_event_quest_labyrinth_reward_group unavailable, rewards disabled: %v", err)
+		return nil, nil, nil
+	}
+
+	// reward group id -> reward items
+	itemsByRewardGroup := make(map[int32][]RewardItem)
+	for _, r := range rewardGroupRows {
+		itemsByRewardGroup[r.EventQuestLabyrinthRewardGroupId] = append(itemsByRewardGroup[r.EventQuestLabyrinthRewardGroupId], RewardItem{
+			PossessionType: r.PossessionType,
+			PossessionId:   r.PossessionId,
+			Count:          r.Count,
+		})
+	}
+
+	// per-stage one-time clear reward
+	clearRewards = make(map[labyrinthStageKey][]RewardItem)
+	for _, r := range stageRows {
+		if r.StageClearRewardGroupId == 0 {
+			continue
+		}
+		if items := itemsByRewardGroup[r.StageClearRewardGroupId]; len(items) > 0 {
+			clearRewards[labyrinthStageKey{r.EventQuestChapterId, r.StageOrder}] = items
+		}
+	}
+
+	if accumGroupRows, err := utils.ReadTable[EntityMEventQuestLabyrinthStageAccumulationRewardGroup]("m_event_quest_labyrinth_stage_accumulation_reward_group"); err != nil {
+		log.Printf("[labyrinth] m_event_quest_labyrinth_stage_accumulation_reward_group unavailable, accumulation rewards disabled: %v", err)
+	} else {
+		// accumulation group id -> tiers (threshold + resolved reward items)
+		tiersByGroup := make(map[int32][]LabyrinthStageTier)
+		for _, r := range accumGroupRows {
+			tiersByGroup[r.EventQuestLabyrinthStageAccumulationRewardGroupId] = append(tiersByGroup[r.EventQuestLabyrinthStageAccumulationRewardGroupId], LabyrinthStageTier{
+				QuestMissionClearCount: r.QuestMissionClearCount,
+				Rewards:                itemsByRewardGroup[r.EventQuestLabyrinthRewardGroupId],
+			})
+		}
+		accumTiers = make(map[labyrinthStageKey][]LabyrinthStageTier)
+		for _, r := range stageRows {
+			if r.StageAccumulationRewardGroupId == 0 {
+				continue
+			}
+			tiers := tiersByGroup[r.StageAccumulationRewardGroupId]
+			sort.Slice(tiers, func(i, j int) bool {
+				return tiers[i].QuestMissionClearCount < tiers[j].QuestMissionClearCount
+			})
+			accumTiers[labyrinthStageKey{r.EventQuestChapterId, r.StageOrder}] = tiers
+		}
+	}
+
+	// per-chapter season-reward milestones
+	if seasonRewardRows, err := utils.ReadTable[EntityMEventQuestLabyrinthSeasonRewardGroup]("m_event_quest_labyrinth_season_reward_group"); err != nil {
+		log.Printf("[labyrinth] m_event_quest_labyrinth_season_reward_group unavailable, season rewards disabled: %v", err)
+	} else {
+		seasonMilestones = buildLabyrinthSeasonMilestones(seasonRows, seasonRewardRows, itemsByRewardGroup)
+	}
+
+	return clearRewards, accumTiers, seasonMilestones
+}
+
+func buildLabyrinthSeasonMilestones(
+	seasonRows []EntityMEventQuestLabyrinthSeason,
+	seasonRewardRows []EntityMEventQuestLabyrinthSeasonRewardGroup,
+	itemsByRewardGroup map[int32][]RewardItem,
+) map[int32][]LabyrinthSeasonMilestone {
+	// chapter -> SeasonRewardGroupId (all seasons of a chapter share one)
+	groupByChapter := make(map[int32]int32)
+	for _, r := range seasonRows {
+		groupByChapter[r.EventQuestChapterId] = r.SeasonRewardGroupId
+	}
+	// SeasonRewardGroupId -> its rows, in table order
+	rowsByGroup := make(map[int32][]EntityMEventQuestLabyrinthSeasonRewardGroup)
+	for _, r := range seasonRewardRows {
+		rowsByGroup[r.EventQuestLabyrinthSeasonRewardGroupId] = append(rowsByGroup[r.EventQuestLabyrinthSeasonRewardGroupId], r)
+	}
+
+	milestones := make(map[int32][]LabyrinthSeasonMilestone)
+	for chapterId, seasonGroupId := range groupByChapter {
+		rows := rowsByGroup[seasonGroupId]
+		if len(rows) == 0 {
+			continue
+		}
+		// rank distinct reward-group ids ascending -> 1-based head stage order
+		stageByRewardGroup := make(map[int32]int32)
+		var distinct []int32
+		for _, r := range rows {
+			if _, seen := stageByRewardGroup[r.EventQuestLabyrinthRewardGroupId]; !seen {
+				stageByRewardGroup[r.EventQuestLabyrinthRewardGroupId] = 0
+				distinct = append(distinct, r.EventQuestLabyrinthRewardGroupId)
+			}
+		}
+		sort.Slice(distinct, func(i, j int) bool { return distinct[i] < distinct[j] })
+		for i, gid := range distinct {
+			stageByRewardGroup[gid] = int32(i + 1)
+		}
+
+		list := make([]LabyrinthSeasonMilestone, 0, len(rows))
+		for _, r := range rows {
+			list = append(list, LabyrinthSeasonMilestone{
+				HeadQuestId:    r.HeadQuestId,
+				HeadStageOrder: stageByRewardGroup[r.EventQuestLabyrinthRewardGroupId],
+				Rewards:        itemsByRewardGroup[r.EventQuestLabyrinthRewardGroupId],
+			})
+		}
+		milestones[chapterId] = list
+	}
+	return milestones
+}

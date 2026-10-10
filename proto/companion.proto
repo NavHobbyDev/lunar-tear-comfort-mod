@@ -1,0 +1,20 @@
+syntax = "proto3";
+
+option go_package = "lunar-tear/server/gen/proto;proto";
+
+import "proto/data.proto";
+
+package apb.api.companion;
+
+service CompanionService {
+	rpc Enhance (CompanionEnhanceRequest) returns (CompanionEnhanceResponse);
+}
+
+message CompanionEnhanceRequest {
+	string userCompanionUuid = 1;
+	int32 addLevelCount = 2;
+}
+
+message CompanionEnhanceResponse {
+	map<string, apb.api.data.DiffData> diffUserData = 99;
+}

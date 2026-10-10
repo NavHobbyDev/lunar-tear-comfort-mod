@@ -1,0 +1,19 @@
+syntax = "proto3";
+
+option go_package = "lunar-tear/server/gen/proto;proto";
+
+import "proto/data.proto";
+
+package apb.api.contentsstory;
+
+service ContentsStoryService {
+	rpc RegisterPlayed (ContentsStoryRegisterPlayedRequest) returns (ContentsStoryRegisterPlayedResponse);
+}
+
+message ContentsStoryRegisterPlayedRequest {
+	int32 contentsStoryId = 1;
+}
+
+message ContentsStoryRegisterPlayedResponse {
+	map<string, apb.api.data.DiffData> diffUserData = 99;
+}

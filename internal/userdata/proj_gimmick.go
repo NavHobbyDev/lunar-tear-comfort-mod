@@ -1,0 +1,297 @@
+package userdata
+
+import (
+	"sort"
+	"sync"
+	"sync/atomic"
+
+	"lunar-tear/server/internal/gametime"
+	"lunar-tear/server/internal/masterdata"
+	"lunar-tear/server/internal/model"
+	"lunar-tear/server/internal/store"
+	"lunar-tear/server/internal/utils"
+)
+
+var gimmickOrnamentRefs = sync.OnceValue(masterdata.LoadGimmickOrnamentRefs)
+var gimmickSequenceChains = sync.OnceValue(masterdata.LoadGimmickSequenceChains)
+var hiddenSequenceSet = sync.OnceValue(masterdata.LoadHiddenGimmickSequenceIDs)
+var gimmickSequenceRanks = sync.OnceValue(masterdata.LoadGimmickSequenceRanks)
+var birdGimmicks = sync.OnceValue(masterdata.LoadBirdGimmickIDs)
+
+// gimmickCatalog is a process-wide handle to the loaded GimmickCatalog, kept
+// here so the visibleGimmickRecords post-filter can consult SequenceAvailable
+// without threading the catalog through every projector call site. runtime.
+// build.go publishes it via SetGimmickCatalog on cold start and on hot reload.
+var gimmickCatalog atomic.Pointer[masterdata.GimmickCatalog]
+
+// SetGimmickCatalog publishes the catalog used by the world-map visibility
+// filter. Safe to call repeatedly (atomic swap).
+func SetGimmickCatalog(catalog *masterdata.GimmickCatalog) {
+	gimmickCatalog.Store(catalog)
+}
+
+const birdDefaultBaseDatetime int64 = 1577836800000 // 2020-01-01 00:00:00 UTC in ms
+
+// gimmickRecordBuilders maps each client-facing gimmick table to the projector
+// that emits its rows. Every projector's output is post-filtered through
+// visibleGimmickRecords before reaching the client, so we can keep the raw
+// projection simple (walk the entire chain) and enforce per-row availability in
+// one place.
+var gimmickRecordBuilders = map[string]func(store.UserState) []map[string]any{
+	"IUserGimmick":                 sortedGimmickRecords,
+	"IUserGimmickOrnamentProgress": sortedGimmickOrnamentProgressRecords,
+	"IUserGimmickSequence":         sortedGimmickSequenceRecords,
+	"IUserGimmickUnlock":           sortedGimmickUnlockRecords,
+}
+
+func init() {
+	for table, records := range gimmickRecordBuilders {
+		register(table, func(user store.UserState) string {
+			s, _ := utils.EncodeJSONMaps(visibleGimmickRecords(user, records(user))...)
+			return s
+		})
+	}
+}
+
+// visibleGimmickRecords strips rows whose gimmick content is not yet available
+// to the player. Only Report-type (hidden story) rows are checked: they follow
+// chain progression, so a chain member is stripped until the player has tapped
+// the previous story in the same chain. Every other gimmick type (fickle
+// birds, lost items, hidden birds, stray obelisks, lost archives) passes
+// through untouched because their schedule-level gate already enforced the
+// chapter clear.
+//
+// Map visibility intentionally follows the entry/unlock prerequisites (fork
+// model) rather than each gimmick's own mission-completion condition — so
+// 900X01..900X04 and 900X06..900X10 open together on chapter clear by design,
+// while 900X05s stay gated by their shared cross-chapter chain progression.
+func visibleGimmickRecords(user store.UserState, records []map[string]any) []map[string]any {
+	catalog := gimmickCatalog.Load()
+	if catalog == nil {
+		return records
+	}
+	now := gametime.NowMillis()
+	visible := records[:0]
+	for _, row := range records {
+		scheduleId := row["gimmickSequenceScheduleId"].(int32)
+		sequenceId := row["gimmickSequenceId"].(int32)
+		gimmickId, hasGimmick := row["gimmickId"].(int32)
+		if catalog.IsReportSequence(sequenceId) || (hasGimmick && catalog.GimmickType(gimmickId) == model.GimmickTypeReport) {
+			if !catalog.SequenceAvailable(&user, scheduleId, sequenceId, now) ||
+				(hasGimmick && !catalog.GimmickUnlockAvailable(&user, scheduleId, sequenceId, gimmickId, now)) {
+				continue
+			}
+		}
+		visible = append(visible, row)
+	}
+	return visible
+}
+
+func projectActiveChainOrnaments(
+	user store.UserState,
+	addKey func(seqKey store.GimmickSequenceKey, seqId int32, ref masterdata.GimmickOrnamentRef),
+	sizeFn func() int,
+	cap int,
+) {
+	refs := gimmickOrnamentRefs()
+	chains := gimmickSequenceChains()
+	hiddenSeq := hiddenSequenceSet()
+
+	// Walk every sequence the user has stored and emit ornament refs for the
+	// whole chain it anchors. Per-row availability is enforced downstream by
+	// visibleGimmickRecords, so we intentionally do NOT filter here — the same
+	// design as the reference fork: keep projection simple (a stable superset
+	// of possible rows) and gate at the encoding boundary.
+	walkChain := func(seqKey store.GimmickSequenceKey) {
+		chain := chains[seqKey.GimmickSequenceId]
+		if len(chain) == 0 {
+			chain = []int32{seqKey.GimmickSequenceId}
+		}
+		for _, seqId := range chain {
+			for _, ref := range refs[seqId] {
+				addKey(seqKey, seqId, ref)
+			}
+		}
+	}
+
+	var nonHidden []store.GimmickSequenceKey
+	for seqKey := range user.Gimmick.Sequences {
+		if hiddenSeq[seqKey.GimmickSequenceId] {
+			walkChain(seqKey)
+		} else {
+			nonHidden = append(nonHidden, seqKey)
+		}
+	}
+	for _, seqKey := range nonHidden {
+		if sizeFn() >= cap {
+			break
+		}
+		walkChain(seqKey)
+	}
+}
+
+func sortedGimmickRecords(user store.UserState) []map[string]any {
+
+	keySet := make(map[store.GimmickKey]struct{})
+	// Real progress rows (genuine user data) — always kept.
+	for key := range user.Gimmick.Progress {
+		keySet[key] = struct{}{}
+	}
+	projectActiveChainOrnaments(user,
+		func(seqKey store.GimmickSequenceKey, seqId int32, ref masterdata.GimmickOrnamentRef) {
+			keySet[store.GimmickKey{
+				GimmickSequenceScheduleId: seqKey.GimmickSequenceScheduleId,
+				GimmickSequenceId:         seqId,
+				GimmickId:                 ref.GimmickId,
+			}] = struct{}{}
+		},
+		func() int { return len(keySet) },
+		masterdata.MaxUserGimmickRows,
+	)
+
+	keys := make([]store.GimmickKey, 0, len(keySet))
+	for key := range keySet {
+		keys = append(keys, key)
+	}
+	sort.Slice(keys, func(i, j int) bool {
+		return compareGimmickKey(keys[i], keys[j]) < 0
+	})
+
+	records := make([]map[string]any, 0, len(keys))
+	for _, key := range keys {
+		isGimmickCleared := false
+		startDatetime := user.GameStartDatetime
+		latestVersion := user.GameStartDatetime
+		if row, ok := user.Gimmick.Progress[key]; ok {
+			isGimmickCleared = row.IsGimmickCleared
+			startDatetime = row.StartDatetime
+			latestVersion = row.LatestVersion
+		}
+		records = append(records, map[string]any{
+			"userId":                    user.UserId,
+			"gimmickSequenceScheduleId": key.GimmickSequenceScheduleId,
+			"gimmickSequenceId":         key.GimmickSequenceId,
+			"gimmickId":                 key.GimmickId,
+			"isGimmickCleared":          isGimmickCleared,
+			"startDatetime":             startDatetime,
+			"latestVersion":             latestVersion,
+		})
+	}
+	return records
+}
+
+func sortedGimmickOrnamentProgressRecords(user store.UserState) []map[string]any {
+
+	keySet := make(map[store.GimmickOrnamentKey]struct{})
+	// Real progress rows (genuine user data) — always kept.
+	for key := range user.Gimmick.OrnamentProgress {
+		keySet[key] = struct{}{}
+	}
+	projectActiveChainOrnaments(user,
+		func(seqKey store.GimmickSequenceKey, seqId int32, ref masterdata.GimmickOrnamentRef) {
+			keySet[store.GimmickOrnamentKey{
+				GimmickSequenceScheduleId: seqKey.GimmickSequenceScheduleId,
+				GimmickSequenceId:         seqId,
+				GimmickId:                 ref.GimmickId,
+				GimmickOrnamentIndex:      ref.OrnamentIndex,
+			}] = struct{}{}
+		},
+		func() int { return len(keySet) },
+		masterdata.MaxUserGimmickRows,
+	)
+
+	keys := make([]store.GimmickOrnamentKey, 0, len(keySet))
+	for key := range keySet {
+		keys = append(keys, key)
+	}
+	sort.Slice(keys, func(i, j int) bool {
+		return compareGimmickOrnamentKey(keys[i], keys[j]) < 0
+	})
+
+	birdG := birdGimmicks()
+	records := make([]map[string]any, 0, len(keys))
+	for _, key := range keys {
+		progressValueBit := int32(0)
+		baseDatetime := user.GameStartDatetime
+		latestVersion := user.GameStartDatetime
+		if row, ok := user.Gimmick.OrnamentProgress[key]; ok {
+			progressValueBit = row.ProgressValueBit
+			baseDatetime = row.BaseDatetime
+			latestVersion = row.LatestVersion
+		} else if birdG[key.GimmickId] {
+			baseDatetime = birdDefaultBaseDatetime
+		}
+		records = append(records, map[string]any{
+			"userId":                    user.UserId,
+			"gimmickSequenceScheduleId": key.GimmickSequenceScheduleId,
+			"gimmickSequenceId":         key.GimmickSequenceId,
+			"gimmickId":                 key.GimmickId,
+			"gimmickOrnamentIndex":      key.GimmickOrnamentIndex,
+			"progressValueBit":          progressValueBit,
+			"baseDatetime":              baseDatetime,
+			"latestVersion":             latestVersion,
+		})
+	}
+	return records
+}
+
+func sortedGimmickSequenceRecords(user store.UserState) []map[string]any {
+
+	ranks := gimmickSequenceRanks()
+
+	keys := make([]store.GimmickSequenceKey, 0, len(user.Gimmick.Sequences))
+	for key := range user.Gimmick.Sequences {
+		keys = append(keys, key)
+	}
+	sort.Slice(keys, func(i, j int) bool {
+		ri, rj := ranks[keys[i].GimmickSequenceId], ranks[keys[j].GimmickSequenceId]
+		if ri != rj {
+			return ri < rj
+		}
+		if keys[i].GimmickSequenceScheduleId != keys[j].GimmickSequenceScheduleId {
+			return keys[i].GimmickSequenceScheduleId < keys[j].GimmickSequenceScheduleId
+		}
+		return keys[i].GimmickSequenceId < keys[j].GimmickSequenceId
+	})
+	if len(keys) > masterdata.MaxUserGimmickRows {
+		keys = keys[:masterdata.MaxUserGimmickRows]
+	}
+
+	records := make([]map[string]any, 0, len(keys))
+	for _, key := range keys {
+		row := user.Gimmick.Sequences[key]
+		records = append(records, map[string]any{
+			"userId":                    user.UserId,
+			"gimmickSequenceScheduleId": row.Key.GimmickSequenceScheduleId,
+			"gimmickSequenceId":         row.Key.GimmickSequenceId,
+			"isGimmickSequenceCleared":  row.IsGimmickSequenceCleared,
+			"clearDatetime":             row.ClearDatetime,
+			"latestVersion":             row.LatestVersion,
+		})
+	}
+	return records
+}
+
+func sortedGimmickUnlockRecords(user store.UserState) []map[string]any {
+	keys := make([]store.GimmickKey, 0, len(user.Gimmick.Unlocks))
+	for key := range user.Gimmick.Unlocks {
+		keys = append(keys, key)
+	}
+	sort.Slice(keys, func(i, j int) bool {
+		return compareGimmickKey(keys[i], keys[j]) < 0
+	})
+
+	records := make([]map[string]any, 0, len(keys))
+	for _, key := range keys {
+		row := user.Gimmick.Unlocks[key]
+		records = append(records, map[string]any{
+			"userId":                    user.UserId,
+			"gimmickSequenceScheduleId": row.Key.GimmickSequenceScheduleId,
+			"gimmickSequenceId":         row.Key.GimmickSequenceId,
+			"gimmickId":                 row.Key.GimmickId,
+			"isUnlocked":                row.IsUnlocked,
+			"latestVersion":             row.LatestVersion,
+		})
+	}
+	return records
+}

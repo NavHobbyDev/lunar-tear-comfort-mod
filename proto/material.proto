@@ -1,0 +1,24 @@
+syntax = "proto3";
+
+option go_package = "lunar-tear/server/gen/proto;proto";
+
+import "proto/data.proto";
+
+package apb.api.material;
+
+service MaterialService {
+	rpc Sell (MaterialSellRequest) returns (MaterialSellResponse);
+}
+
+message MaterialSellRequest {
+	repeated MaterialSellPossession materialPossession = 1;
+}
+
+message MaterialSellPossession {
+	int32 materialId = 1;
+	int32 count = 2;
+}
+
+message MaterialSellResponse {
+	map<string, apb.api.data.DiffData> diffUserData = 99;
+}
