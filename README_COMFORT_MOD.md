@@ -67,6 +67,21 @@ Special thanks to:
   All premium tickets are converted into free gems  
   
 ---  
+
+## License and attribution
+
+**This repository** (modifications and comfort-mod changes) is released under the [MIT License](LICENSE).
+
+The base code is derived from:
+- [Walter-Sparrow/lunar-tear](https://github.com/Walter-Sparrow/lunar-tear) (MIT License, Copyright (c) 2026 Ilya Groshev)
+- [JCalandre/lunar-tear](https://github.com/JCalandre/lunar-tear)
+- [Lycheenut/lunar-tear](https://github.com/Lycheenut/lunar-tear)
+
+Upstream code remains the work of its original authors. This repository does not claim to re-license their work beyond the terms of the original MIT license.
+
+If you are an upstream author and want a different credit line, license note, or removal, open an issue or contact the maintainer.
+
+---
   
 ### Disclaimer  
   
