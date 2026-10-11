@@ -47,7 +47,8 @@ Special thanks to:
   20 auto-battles per day  
 - **Daily seasonal rewards**    
   Seasonal rewards for PvP, Subjugation and Fate Board are delivered to the mailbox every day  
-- **Extra options in Notices window**  
+- **Extra options in Notices window**
+<img width="1180" height="820" alt="image" src="https://github.com/user-attachments/assets/b2adb7df-e1ff-4856-96df-579aef61f5d3" />
   - Switch master-data file without restarting the server  
   - Skip missions to unlock Hidden Stories  
   - Auto-complete quest missions (all three clear requirements)  
@@ -74,7 +75,8 @@ Special thanks to:
 <br>
 
 - You do **not** need to rename the files. Simply place all variants into the `release` folder — the client will automatically detect every available variant.
-- If you create your own variants, the main rule is that the file `20240404193219.bin.e` must contain the full content from **all** variants.
+- If you create your own variants, the main rule is that the file `20240404193219.bin.e` must contain the full content from **all** variants.  
+  In the client this file is displayed as **«All»**.
 - You can create custom variants and name them following the pattern:  
   `20240404193219_YourName.bin.e`
 - The selection is independent for each player on the server — every player can use their own chosen masterdata.
