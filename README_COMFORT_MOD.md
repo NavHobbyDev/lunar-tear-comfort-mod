@@ -67,8 +67,8 @@ Prebuilt binaries are available on the **[Releases](https://github.com/NavHobbyD
   20 auto-battles per day  
 - **Daily seasonal rewards**    
   Seasonal rewards for PvP, Subjugation and Fate Board are delivered to the mailbox every day  
-- **Extra options in Notices window**
-  - Switch master-data file without restarting the server  
+- **Extra options in Notices window** [Screenshot](#notices-screenshot)
+  - Switch master-data file without restarting the server  ([About](#notices-masterdata))
   - Skip missions to unlock Hidden Stories  
   - Auto-complete quest missions (all three clear requirements)  
   - Send any item to the mailbox by ID without a save editor  
@@ -87,7 +87,7 @@ Prebuilt binaries are available on the **[Releases](https://github.com/NavHobbyD
   All premium tickets are converted into free gems
   
 ---  
-
+<a id="notices-screenshot"></a>
 <details>
 <summary><b>Screenshot Extra options</b></summary>
 <br>
@@ -98,6 +98,7 @@ Prebuilt binaries are available on the **[Releases](https://github.com/NavHobbyD
 
 </details>
 
+<a id="notices-masterdata"></a>
 <details>
 <summary><b>Switching between masterdata variants in the client</b></summary>
 
