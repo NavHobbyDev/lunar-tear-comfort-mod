@@ -71,8 +71,8 @@ Prebuilt binaries are available on the **[Releases](https://github.com/NavHobbyD
   - Switch master-data file without restarting the server  
   - Skip missions to unlock Hidden Stories  
   - Auto-complete quest missions (all three clear requirements)  
-  - Send any item to the mailbox by ID without a save editor    
-    (requires exact Possession ID + Item ID — no safety checks are performed, incorrect values can corrupt the save)  
+  - Send any item to the mailbox by ID without a save editor  
+  (requires exact [Possession ID](https://github.com/NavHobbyDev/lunar-tear-comfort-mod/blob/main/IDs/PossessionType.md) + [Item ID](https://github.com/NavHobbyDev/lunar-tear-comfort-mod/tree/main/IDs) — no safety checks are performed, incorrect values can corrupt the save)
 - **Memoir bonuses scale with rarity**    
   Higher rarity → more bonus slots (max rarity = maximum bonuses)  
 - **Memoir upgrade chance**    
