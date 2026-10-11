@@ -43,7 +43,7 @@ Special thanks to:
 - **Missions are challenge-only**    
   Missions behave like permanent achievements  
 - **PvP Simulation**    
-  Fully automatic battles that use only your strongest deck that previously cleared the corresponding quest.    
+  Fully automatic battles using your strongest deck among those previously used or cleared in any quest. The outcome depends purely on deck power. If power levels are within ±25%, the result is randomized. 
   You cannot influence the outcome — you can only watch the results table.    
   20 auto-battles per day  
 - **Daily seasonal rewards**    
