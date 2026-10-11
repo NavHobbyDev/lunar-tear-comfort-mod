@@ -48,7 +48,6 @@ Special thanks to:
 - **Daily seasonal rewards**    
   Seasonal rewards for PvP, Subjugation and Fate Board are delivered to the mailbox every day  
 - **Extra options in Notices window**
-<img width="1180" height="820" alt="image" src="https://github.com/user-attachments/assets/b2adb7df-e1ff-4856-96df-579aef61f5d3" />
   - Switch master-data file without restarting the server  
   - Skip missions to unlock Hidden Stories  
   - Auto-complete quest missions (all three clear requirements)  
@@ -65,9 +64,19 @@ Special thanks to:
 - **Stamina system**    
   Stamina is never consumed; stamina bottles are converted into gold  
 - **Premium tickets**    
-  All premium tickets are converted into free gems  
+  All premium tickets are converted into free gems
   
 ---  
+
+<details>
+<summary><b>Screenshot Extra options</b></summary>
+<br>
+
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/b2adb7df-e1ff-4856-96df-579aef61f5d3" alt="Screenshot">
+</p>
+
+</details>
 
 <details>
 <summary><b>Switching between masterdata variants in the client</b></summary>
