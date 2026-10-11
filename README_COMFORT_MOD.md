@@ -9,8 +9,7 @@ Special thanks to:
 > **Important**  
 > For this mod to work correctly, the masterdata file **must** be patched with the  
 > [comfort-mod](https://github.com/NavHobbyDev/lunar-tear-masterdata-patcher/tree/comfort-mod)  
-> version of the patcher.  
-> (The config in this branch is different from the main patcher.)  
+> version of the patcher. (The config in this branch is different from the main patcher.)  
 > If you are following the Colab_Patching_Guide.pdf, on step 7 you need to select the Comfort Mod branch.
 
 <details>
