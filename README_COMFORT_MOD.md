@@ -23,7 +23,16 @@ Special thanks to:
 </details>
 
 ---  
-  
+
+Prebuilt binaries are available on the **[Releases](https://github.com/NavHobbyDev/lunar-tear-comfort-mod/releases)** page:
+
+| File | Platform |
+|------|----------|
+| `build_win64.zip` | Windows 64-bit |
+| `build_armv7.tar.gz` | ARMv7 (Android / Linux) |
+
+---  
+
 ## What this mod changes  
   
 - Numerous bug fixes and stability improvements  
