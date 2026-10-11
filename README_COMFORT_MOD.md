@@ -6,10 +6,11 @@ Special thanks to:
 - [JCalandre/lunar-tear](https://github.com/JCalandre/lunar-tear)  
 - [Lycheenut/lunar-tear](https://github.com/Lycheenut/lunar-tear)  
   
-> **Important**    
-> For correct operation this mod **must** be applied on top of the    
-> [comfort-mod](https://github.com/NavHobbyDev/lunar-tear-masterdata-patcher/tree/comfort-mod)    
-> branch of the masterdata patcher.  
+> **Important**  
+> For this mod to work correctly, the masterdata file **must** be patched with the  
+> [comfort-mod](https://github.com/NavHobbyDev/lunar-tear-masterdata-patcher/tree/comfort-mod)  
+> version of the patcher.  
+> (The config in this branch is different from the main patcher.)
   
 ---  
   
