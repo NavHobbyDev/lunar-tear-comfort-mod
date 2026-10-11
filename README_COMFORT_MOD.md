@@ -63,8 +63,9 @@ Prebuilt binaries are available on the **[Releases](https://github.com/NavHobbyD
   Missions behave like permanent achievements  
 - **PvP Simulation**    
   Fully automatic battles using your strongest deck among those previously used or cleared in any quest. The outcome depends purely on deck power. If power levels are within ±25%, the result is randomized. 
-  You cannot influence the outcome — you can only watch the results table.    
-  20 auto-battles per day  
+  You cannot influence the outcome — you can only watch the results table. 
+  The table is filled with bots of varying power levels. Battles take place between bots and other players on the server.   
+  20 auto-battles per day (occur after receiving the stamp bonus or upon opening the arena for the first time).  
 - **Daily seasonal rewards**    
   Seasonal rewards for PvP, Subjugation and Fate Board are delivered to the mailbox every day  
 - **Extra options in Notices window** [Screenshot](#notices-screenshot)
